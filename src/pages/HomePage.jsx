@@ -6,7 +6,7 @@ export default function HomePage() {
   const [paused, setPaused] = useState(false);
   const [list, setList] = useState(false);
   return <main className={`home ${paused ? 'paused' : ''}`}>
-    <div className="photo-background" /><div className="photo-shade" />
+    <div className="photo-background" style={{ backgroundImage: `url(${import.meta.env.BASE_URL}images/playground.png)` }} /><div className="photo-shade" />
     <header className="home-header"><Link className="wordmark" to="/"><Asterisk size={30} strokeWidth={2.4} /> playground<span className="version">VOL. 01</span></Link><button className="glass-button" onClick={() => setList(!list)} aria-expanded={list}><Layers size={15} /> 모든 실험 <span className="count">{experiments.length.toString().padStart(2, '0')}</span></button></header>
     <section className="home-heading"><div className="eyebrow"><span className="green-dot" /> A PLACE FOR SMALL EXPERIMENTS</div><h1>일단, 놀아볼까요<span>?</span></h1><p>떠다니는 아이디어를 클릭하고, 나만의 기능을 실험해보세요.</p></section>
     <nav className="floating-experiments" aria-label="실험 페이지">

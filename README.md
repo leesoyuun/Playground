@@ -49,3 +49,9 @@
 - 현재: 작업 의도와 초기 범위 정리
 - 다음: 리팩토링할 채팅 코드와 개선할 지점 확인
 - 구현: 아직 시작하지 않음
+
+## 배포
+
+GitHub Pages 주소: https://leesoyuun.github.io/Playground/
+
+`main`에 push하면 GitHub Actions가 빌드하고 배포한다. Pages용 빌드는 `npm run build:pages`로 실행한다. 배포 환경은 HashRouter를 사용하므로 채팅 주소는 `/Playground/#/chat`이며 새로고침과 직접 접근을 지원한다. 로컬 개발은 기존 `/chat` 경로를 사용한다.
