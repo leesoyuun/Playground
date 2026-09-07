@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 test('home icons navigate to isolated experiments and browser history works', async ({ page }) => {
-  const errors = [];
+  const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.goto('/');
   await expect(page.getByRole('heading', { name: '일단, 놀아볼까요?' })).toBeVisible();

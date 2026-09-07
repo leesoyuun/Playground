@@ -10,7 +10,7 @@
 
 ## 시작점
 
-현재 놀이터의 `src/features/chat/ChatPage.jsx`에는 메시지 표시, 입력창, 전송 처리, 데모 응답, 실험 설정이 한 컴포넌트에 들어 있다.
+현재 놀이터의 `src/features/chat/ChatPage.tsx`에는 메시지 표시, 입력창, 전송 처리, 데모 응답, 실험 설정이 한 컴포넌트에 들어 있다.
 
 우선 이 구현을 출발점으로 삼는다. 별도의 기존 서비스 채팅을 리팩토링하려는 경우에는 해당 코드를 가져온 뒤 실제 구조와 문제에 맞춰 작업 범위를 조정한다.
 
@@ -55,3 +55,7 @@
 GitHub Pages 주소: https://leesoyuun.github.io/Playground/
 
 `main`에 push하면 GitHub Actions가 빌드하고 배포한다. Pages용 빌드는 `npm run build:pages`로 실행한다. 배포 환경은 HashRouter를 사용하므로 채팅 주소는 `/Playground/#/chat`이며 새로고침과 직접 접근을 지원한다. 로컬 개발은 기존 `/chat` 경로를 사용한다.
+
+## 개발 환경
+
+React + TypeScript + Vite를 사용한다. 소스는 `.tsx` / `.ts`로 작성하며 strict 타입 검사를 적용한다. `npm run typecheck`로 검사하고, 일반 빌드와 Pages 배포 빌드에서도 타입 검사를 실행한다.
