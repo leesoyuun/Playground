@@ -1,0 +1,522 @@
+/**
+ * @copyright (C) 2023, rsupport. All rights reserved
+ *
+ * @license
+ * This software and/or source code may be used, copied and/or disseminated only
+ * with the written permission of rsupport, or in accordance with the terms
+ * and conditions stipulated in the agreement/contract under which the software
+ * and/or source code has been supplied by rsupport or its affiliates.
+ * Unauthorized use, copying, or dissemination of this file, via any medium, is
+ * strictly prohibited, and will constitute an infringement of copyright.
+ *
+ * @author
+ * SoonKi Min (skmin@rsupport.com)
+ *
+ * @description
+ *
+ * @created at Fri Jun 09 2023
+ **/
+
+import { forwardRef, memo, useContext, useMemo, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+
+import { _T, _P } from "@rfice/language";
+import { EventID, POPOVER_ID, ZIndex } from "@/frameworks/core/commons";
+import { usePopover, useConfirm, useFileManager } from "@/frameworks/core/hooks";
+import { useChatMessageActions, useChatRoomActions, useSpaceChannelState } from "@/frameworks/core/chat";
+import { Configure, I18nTimeFormat } from "@/frameworks/libraries/utilities";
+import { EventHandler, useEventHandler } from "@rfice/eventhandler";
+import { useToast } from "@/frameworks/designStuff/components";
+import { useClipboard } from "@/frameworks/libraries/hooks";
+import { ChatSubMenu } from "@/frameworks/core/components";
+import { useMeeting, useMyRoom, useSpace } from "@/frameworks/core/API";
+import { useChatDataStore } from "@/modules/chat/store";
+import { usePersistActions } from "@/frameworks/core/persistence";
+import { Utility } from "@/frameworks/libraries/utilities";
+import { ChatUpdateInput, Message, ReactionPopup, UserInfo } from "./private/components";
+import { usePreviewChatFile, useSubmenuActions, useUpdateMessage } from "./private/hooks";
+import * as S from "./private/emotion";
+import { SpaceChatContext } from "../SpaceChat/SpaceChat";
+import { useMiniChatPopup } from "../MiniChatPopup/private";
+
+interface Events {
+	onMessageReacted: () => void;
+}
+
+type ChatItemProps = {
+	lastMessageReadUsers?: WebServices.DirectMessage.GetReaders.Data["users"];
+	variant: ChatUI.Size;
+	isMessageGroup: boolean;
+	content: ChatServices.Format2.Message | ChatServices.Format2.VoteMessage;
+	isMe: boolean;
+	spaceID?: string;
+	myRoomID?: string;
+	isMyRoom: boolean;
+	threadID?: string;
+	isRootThread?: boolean;
+} & Omit<WebServices.Chat.Messages.Data["content"][number], "content"> &
+	Partial<Events>;
+
+const ChatItem = forwardRef<HTMLLIElement, ChatItemProps>(({ variant = "transparent", ...rest }, ref) => {
+	const { addReaction, removeReaction, addBookmark, removeBookmark } = useChatMessageActions();
+	const space = useSpaceChannelState(rest.spaceID ?? "");
+	const { spaces } = usePersistActions();
+	const { handleClose } = useMiniChatPopup({
+		id: rest.roomId,
+		spaceID: rest.spaceID,
+		groupID: space?.groupId || "",
+		threadID: rest?.threadID
+	});
+	const queryClient = useQueryClient();
+	const chatRoomActions = useChatRoomActions();
+	const { toggle, hide } = usePopover();
+	const { confirm } = useConfirm();
+	const toast = useToast();
+
+	const spaceChathatContext = useContext(SpaceChatContext);
+
+	const chatRendererRef = useRef<HTMLDivElement>(null);
+
+	const { messageToUpdate, updateMessage, startUpdateMessage, stopUpdateMessage } = useUpdateMessage(rest.roomId);
+	const { previewChatFile } = usePreviewChatFile();
+	const { replyMessage, noticeMessage, deleteMessage } = useSubmenuActions();
+	const { removeLink } = useFileManager();
+	const meetingAPI = useMeeting();
+
+	const { copy } = useClipboard(chatRendererRef);
+
+	const logActionRemoveFile = () => {
+		if (spaceChathatContext.spaceType === "CONFERENCE") {
+			meetingAPI.actionLog.save({ conferenceId: rest.spaceID || "", actionType: "FILE_DELETE" });
+		}
+	};
+
+	const clickMessage = (chatItem: ChatServices.Format2.Elements.AllRichtextElements) => {
+		if (chatItem.type === "file" || chatItem.type === "image") {
+			previewChatFile({
+				files: rest.files,
+				chatContent: chatItem,
+				messageID: rest.roomMessageId,
+				threadMessageID: rest?.threadID,
+				roomID: rest.roomId,
+				userID: String(rest.user?.id),
+				date: rest.createdAt,
+				isHideFileSize: true,
+				variant,
+				onRemoveFile: () => {
+					logActionRemoveFile();
+				}
+			});
+		}
+	};
+
+	const clickThread = async () => {
+		if (variant === "fullSize") {
+			handleClose();
+			useChatDataStore.getState().setThreadID(rest.roomMessageId);
+			return;
+		}
+
+		handleClose();
+		if (rest.spaceId) {
+			const spaceType = spaces.get_space(rest.spaceId)?.feSpaceType;
+			if (spaceType === "OPEN_WORLD") {
+				const room = await chatRoomActions.spaceChat.openworld.join(
+					rest.spaceId,
+					spaces.get_space(rest.spaceId)?.name || ""
+				);
+				if (!room?.roomId) throw new Error("roomId is not exist");
+			}
+			chatRoomActions.common.open({
+				type: "Space",
+				channelID: rest.roomId,
+				spaceID: rest.spaceId || "",
+				threadID: rest.roomMessageId
+			});
+		} else {
+			chatRoomActions.common.open({
+				type: "DM",
+				channelID: rest.roomId,
+				threadID: rest.roomMessageId
+			});
+		}
+		useChatDataStore.getState().setThreadID(rest.roomMessageId);
+	};
+
+	const clickBookmark = (enable: boolean) => {
+		const messageInfo = {
+			roomId: rest.roomId,
+			messageId: rest.roomMessageId
+		};
+		if (enable) {
+			addBookmark(messageInfo);
+		} else {
+			removeBookmark(messageInfo);
+		}
+	};
+
+	const clickSubmenuItem = (ev: React.MouseEvent<HTMLLIElement>) => {
+		const target = ev.currentTarget as HTMLLIElement;
+		const id = target.id as "update" | "thread" | "reply" | "notice" | "delete" | "copy";
+		switch (id) {
+			case "update": {
+				// 업데이트는 메세지 업데이트이기 떄문에 vote type에는 필요하지 않음
+				// TODO 함수를 VOTE 기준으로 나눌지 SubMenu 컴포넌트 자체를 나눌지 고민 필요.
+
+				// 이모티콘만 있을 경우 수정 불가, 이모티콘과 텍스트가 같이 있을 경우 수정 가능
+				if (rest.content.elements.length === 1 && rest.content.elements?.[0]?.type === "emoticon") break;
+				// 투표 메세지일 경우 수정 불가
+				if (rest.content.type === "vote") break;
+
+				const messInfo = {
+					messageId: rest.roomMessageId,
+					roomId: rest.roomId
+				};
+				EventHandler.emit(EventID.OPEN_UPDATE_MESSAGE, messInfo);
+				startUpdateMessage(rest.content);
+				break;
+			}
+			case "thread": {
+				clickThread();
+				break;
+			}
+			case "reply": {
+				replyMessage({
+					message: rest.content,
+					files: rest.files,
+					messageID: rest.roomMessageId,
+					roomID: rest.roomId,
+					user: rest.user,
+					threadID: rest.threadID,
+					variant
+				});
+
+				// 답장하기시 긴급메세지 상태를 false 처리 하기 위함.
+				EventHandler.emit(EventID.UPDATE_EMERGENCY, {
+					isEmergency: false
+				});
+				break;
+			}
+			case "notice": {
+				if (rest.content.elements.length === 1 && rest.content.elements?.[0]?.type === "emoticon") break;
+				noticeMessage({
+					messageID: rest.roomMessageId,
+					roomID: rest.roomId,
+					spaceID: rest.spaceID
+				});
+				break;
+			}
+			case "delete": {
+				const title = rest.thread?.count || 0 > 0 ? _T("대화목록 삭제") : _T("정말 삭제하시겠습니까?");
+				const descriptions =
+					rest.thread?.count || 0 > 0
+						? _P(
+								"전체 대화목록을 완전히 삭제 하시겠습니까?<br />메시지와 모든 답장이 삭제되며 복구할 수 없습니다."
+							)
+						: "";
+
+				confirm(
+					{
+						confirmText: _T("삭제"),
+						title: title,
+						descriptions,
+						descriptionAlign: "left"
+					},
+					{
+						async onConfirm() {
+							await deleteMessage({ messageID: rest.roomMessageId, roomID: rest.roomId });
+
+							if (rest.files) {
+								rest.files.forEach((file) => {
+									const parsedFileData = JSON.parse(file.data);
+									if (parsedFileData.type === "link") {
+										removeLink({ id: file.fileBoxId });
+										queryClient.refetchQueries({
+											queryKey: ["folderFileList", { id: "All" }]
+										});
+									}
+								});
+								logActionRemoveFile();
+							}
+						}
+					}
+				);
+				break;
+			}
+			case "copy": {
+				const hasText = Boolean(chatRendererRef.current?.textContent);
+				copy({
+					callback: () => {
+						const type = hasText ? _T("텍스트") : _T("이미지");
+						return toast.show({
+							type: "system",
+							message: _T("{{type}}가 복사되었습니다.", { type })
+						});
+					}
+				});
+				break;
+			}
+			default:
+				break;
+		}
+	};
+
+	const clickMore = (ev: React.MouseEvent<HTMLButtonElement>) => {
+		const target = ev.currentTarget as HTMLButtonElement;
+
+		toggle({
+			popoverID: POPOVER_ID.CHAT_SUB_MENU,
+			content: (
+				<ChatSubMenu
+					spaceID={rest.spaceID}
+					onClickItem={clickSubmenuItem}
+					isMe={rest.isMe}
+					variant={variant}
+					threadID={rest.threadID}
+					type="section"
+					hideAnnounceMenu={isMultipleFiles}
+				/>
+			),
+			anchorEl: target,
+			direction: {
+				x: "left",
+				y: "bottom"
+			},
+			position: {
+				x: -40,
+				y: 0
+			},
+			zIndex: ZIndex.SIDEBAR
+		});
+	};
+
+	const myRoomAPI = useMyRoom();
+	const spaceAPI = useSpace();
+	const setSearchTextSelection = useChatDataStore((state) => state.set_chat_search_selected);
+
+	const openSpaceChat = async () => {
+		if (!rest.spaceID) return;
+
+		// MY_ROOM
+		if (rest.isMyRoom) {
+			try {
+				// get myroom info
+				const { data } = await myRoomAPI.inquiry.execute({
+					myRoomId: rest.spaceID
+				});
+				if (!data?.generalRoomId) throw new Error("generalRoomId is not exist");
+				chatRoomActions.common.open({
+					channelID: data?.generalRoomId,
+					type: "Space",
+					spaceID: data.id || ""
+				});
+			} catch (error) {
+				console.error("#SpaceCardComp# error", error);
+			}
+		}
+		// OPEN_WORLD, GROUP_SPACE
+		else {
+			// get space info
+			const { data } = await spaceAPI.detail.execute({
+				spaceId: rest.spaceID
+			});
+			const spaceType = data?.spaceType || "";
+			const spaceName = data?.name || "";
+
+			// OPEN_WORLD
+			if (spaceType === "OPEN_WORLD") {
+				try {
+					const room = await chatRoomActions.spaceChat.openworld.join(rest.spaceID, spaceName);
+					if (!room?.roomId) throw new Error("roomId is not exist");
+					await chatRoomActions.common.open({
+						channelID: room.roomId,
+						type: "Space",
+						spaceID: rest.spaceID
+					});
+				} catch (error) {
+					console.error("#SpaceCardComp# error", error);
+				}
+			}
+			// GROUP_SPACE
+			else if (spaceType === "NORMAL" || spaceType === "DEFAULT") {
+				if (!data?.generalRoomId) throw new Error("generalRoomId is not exist");
+				chatRoomActions.common.open({
+					channelID: data?.generalRoomId,
+					type: "Space",
+					spaceID: rest.spaceID
+				});
+			}
+		}
+	};
+
+	const onClickMountRight = (ev: React.MouseEvent<HTMLElement>) => {
+		const target = ev.currentTarget as HTMLButtonElement;
+		const { left, width } = target.getBoundingClientRect();
+		const { clientX } = ev;
+		const relativeX = clientX - left;
+		let positionX = 0;
+		if (positionX + 200 > width) {
+			positionX = width - 200;
+		} else {
+			positionX = relativeX;
+		}
+
+		// 공간 채팅일 경우 해당 채팅방을 연다
+		const isLeftClick = ev.type === "click" && ev.nativeEvent.button === 0;
+		const isTransparentChat = variant === "transparent" && !rest.threadID;
+		if (isLeftClick && isTransparentChat && rest.spaceID) {
+			setSearchTextSelection(rest.roomMessageId);
+			openSpaceChat();
+			return;
+		}
+
+		// 채팅창을 열었을때 input에 의해 type 이 Caret이되고 rangeCount가 1 로 변경이 되기 때문에 rangeCount로 분기 처리할 수 없기 때문에 isNotDraggedSelection, isNotTypingSelection 로 처리함
+		const { anchorOffset, focusOffset, type } = window.getSelection() as Selection;
+		const isNotDraggedSelection = anchorOffset === 0 && focusOffset === 0 && type === "Range";
+		const isNotTypingSelection = type === "Caret";
+
+		if (!(isNotDraggedSelection || isNotTypingSelection)) return;
+
+		if (ev.type === "contextmenu" && ev.nativeEvent.button) {
+			const clickTarget = ev.nativeEvent.target as HTMLElement;
+			toggle({
+				popoverID: POPOVER_ID.CHAT_SUB_MENU,
+				content: (
+					<ChatSubMenu
+						threadID={rest.threadID}
+						spaceID={rest.spaceID}
+						onClickItem={clickSubmenuItem}
+						isMe={rest.isMe}
+						variant={variant}
+						type={clickTarget.nodeName === "IMG" ? "image" : "section"}
+						hideAnnounceMenu={isMultipleFiles}
+					/>
+				),
+				position: {
+					x: ev.nativeEvent.offsetX,
+					y: ev.nativeEvent.offsetY
+				},
+				anchorEl: clickTarget,
+				hasMouseClickAction: useChatDataStore.getState().show_fullsize_chat,
+				zIndex: ZIndex.SIDEBAR
+			});
+			ev.preventDefault();
+		}
+	};
+
+	const clickEmoji = (ev: React.MouseEvent<HTMLButtonElement>) => {
+		toggle({
+			popoverID: "EMOJI_PICKER",
+			anchorEl: ev.currentTarget,
+			direction: {
+				x: "left",
+				y: "bottom"
+			},
+			content: (
+				<ReactionPopup
+					onSelect={(reaction) => {
+						const targetReaction = rest.reactions.find((v) => v.type === reaction);
+						if (targetReaction && targetReaction.users.find((user) => user.id === Configure.userID)) {
+							removeReaction({
+								messageId: rest.roomMessageId,
+								roomId: rest.roomId,
+								type: reaction
+							}).then(() => {
+								rest.onMessageReacted?.();
+							});
+						} else {
+							addReaction({
+								messageId: rest.roomMessageId,
+								roomId: rest.roomId,
+								type: reaction
+							}).then(() => {
+								rest.onMessageReacted?.();
+							});
+						}
+
+						hide("EMOJI_PICKER");
+					}}
+				/>
+			),
+			zIndex: ZIndex.SIDEBAR
+		});
+	};
+
+	useEventHandler(EventID.OPEN_UPDATE_MESSAGE, ({ messageId, roomId }: { messageId: string; roomId: string }) => {
+		if (roomId !== rest.roomId) return;
+		if (messageId !== rest.roomMessageId) {
+			stopUpdateMessage();
+		}
+	});
+
+	// 두개 이상의 파일이 있는 경우 공지 불가
+	const isMultipleFiles = useMemo(() => {
+		return (
+			rest?.files?.filter((file) => Utility.convert.stringToJSON(file.data || "{}")?.type !== "link").length > 1
+		);
+	}, [rest?.files]);
+
+	return (
+		<S.ChatWrapper
+			status="success"
+			ref={ref}
+			variant={variant}
+			id={rest.roomMessageId}
+			emergency={rest.emergency}
+			data-variant={variant}
+		>
+			<S.Blur status="success" variant={variant} emergency={rest.emergency}>
+				{(variant === "transparent" || !rest.isMessageGroup) && (
+					<UserInfo
+						status="success"
+						id={rest.user?.id}
+						variant={variant}
+						date={I18nTimeFormat.i18n_format("A_TIME_DATE", rest.createdAt)}
+					/>
+				)}
+				{messageToUpdate && (
+					<ChatUpdateInput
+						{...rest}
+						variant={variant}
+						threadID={rest.threadID}
+						messageToUpdate={messageToUpdate}
+						onUpdateCancel={stopUpdateMessage}
+						onUpdateSubmit={(line, files, isEmergency, text) => {
+							messageToUpdate.elements.forEach((element) => {
+								if (element.type === "emoticon") {
+									line.elements.unshift(element);
+								}
+							});
+							updateMessage(line, {
+								messageID: rest.roomMessageId,
+								roomID: rest.roomId,
+								searchMessage: text ?? ""
+							});
+						}}
+					/>
+				)}
+				{!messageToUpdate && (
+					<Message
+						{...rest}
+						ref={chatRendererRef}
+						content={rest.content}
+						variant={variant}
+						threadID={rest.threadID}
+						isRootThread={rest.isRootThread}
+						isUpdated={rest.messageUpdated || false}
+						onClickEmojiIcon={(ev) => clickEmoji(ev)}
+						onClickThreadIcon={clickThread}
+						onClickMessage={clickMessage}
+						onClickMoreIcon={clickMore}
+						onClickMountRight={rest.content.type !== "vote" ? onClickMountRight : undefined}
+						onClickBookmark={clickBookmark}
+					/>
+				)}
+			</S.Blur>
+		</S.ChatWrapper>
+	);
+});
+
+const result = memo(ChatItem);
+result.displayName = "ChatItem";
+export default result;

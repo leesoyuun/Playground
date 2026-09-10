@@ -1,19 +1,22 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { ArrowUp, MessageCircle, RotateCcw, SlidersHorizontal } from 'lucide-react';
-type ReplyMode = 'echo' | 'fixed';
-interface Message { id: string; role: 'user' | 'assistant'; text: string }
-const initial: Message[] = [{ id: 'welcome', role: 'assistant', text: '안녕하세요! 여기는 채팅 실험실이에요. 메시지를 보내며 대화 UI를 테스트해보세요.' }];
+import { useState } from 'react';
+import { ThemeProvider } from '@emotion/react';
+import { Hash, RotateCcw, Users } from 'lucide-react';
+import { MockChatProvider } from './mock/ChatProvider';
+import type { DatasetKind } from './rfice/types';
+import { theme } from './rfice/primitives';
+import MessageList from './rfice/MessageList';
+import PerformancePanel from './PerformancePanel';
+import MessageComposer from './MessageComposer';
+import './chat.css';
 export default function ChatPage() {
-  const [messages, setMessages] = useState(initial);
-  const [input, setInput] = useState('');
-  const [mode, setMode] = useState<ReplyMode>('echo');
-  const [compact, setCompact] = useState(false);
-  const bottom = useRef<HTMLDivElement>(null);
-  useEffect(() => { bottom.current?.scrollIntoView({ block: 'nearest' }); }, [messages]);
-  function send(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); const text = input.trim(); if (!text) return;
-    const reply = mode === 'echo' ? `보내주신 메시지: ${text}` : '메시지를 받았어요. 이 응답을 원하는 로직으로 바꿔보세요!';
-    setMessages(previous => [...previous, { id: crypto.randomUUID(), role: 'user', text }, { id: crypto.randomUUID(), role: 'assistant', text: reply }]); setInput('');
-  }
-  return <div className="experiment-workspace"><section className="chat-panel"><div className="panel-header"><span><MessageCircle size={17} /> 대화 미리보기 <i className="green-dot" /></span><button className="icon-button" aria-label="대화 초기화" title="대화 초기화" onClick={() => setMessages(initial)}><RotateCcw size={16} /></button></div><div className={`chat-messages ${compact ? 'compact' : ''}`} role="log" aria-live="polite">{messages.map(message => <div className={`chat-message ${message.role}`} key={message.id}><span className="message-author">{message.role === 'user' ? 'YOU' : 'PLAYGROUND BOT'}</span><div>{message.text}</div></div>)}<div ref={bottom} /></div><form onSubmit={send} className="composer"><input aria-label="메시지" placeholder="메시지를 입력해보세요…" value={input} onChange={e => setInput(e.target.value)} maxLength={2000} /><button aria-label="메시지 전송" disabled={!input.trim()}><ArrowUp size={19} /></button></form><p className="panel-footnote">로컬 데모 · 메시지는 서버로 전송되지 않아요</p></section><aside className="settings-panel"><h2><SlidersHorizontal size={16} /> 실험 설정</h2><label htmlFor="reply-mode">응답 방식</label><select id="reply-mode" value={mode} onChange={e => setMode(e.target.value === 'fixed' ? 'fixed' : 'echo')}><option value="echo">에코 — 입력한 메시지 되돌려주기</option><option value="fixed">고정 데모 응답</option></select><label className="checkbox-label"><input type="checkbox" checked={compact} onChange={e => setCompact(e.target.checked)} /> 메시지 간격 줄이기</label><div className="setting-info"><span>현재 대화</span><strong>{messages.filter(m => m.role === 'user').length}개의 메시지</strong></div><p className="settings-hint">응답 방식과 UI를 바꿔가며 채팅의 기본 동작을 실험해보세요.</p></aside></div>;
+  const [count, setCount] = useState(2000);
+  const [kind, setKind] = useState<DatasetKind>('mixed');
+  const [generation, setGeneration] = useState(0);
+  return <div className="rfice-lab">
+    <div className="rf-test-options"><label>Mock 메시지<select aria-label="Mock 메시지 수" value={count} onChange={event => setCount(Number(event.target.value))}><option value={40}>40개</option><option value={500}>500개</option><option value={2000}>2,000개</option><option value={5000}>5,000개</option></select></label><label>메시지 구성<select aria-label="메시지 구성" value={kind} onChange={event => setKind(event.target.value as DatasetKind)}><option value="mixed">혼합 · 이미지 / 서식 / 답장</option><option value="text">텍스트만</option></select></label><button aria-label="대화 초기화" onClick={() => setGeneration(value => value + 1)}><RotateCcw size={15} /> 초기화</button></div>
+    <ThemeProvider theme={theme}><MockChatProvider key={`${count}-${kind}-${generation}`} count={count} kind={kind}>
+      <div className="rf-workspace"><section className="rf-chat" aria-label="rfice 채팅 성능 테스트"><header className="rf-chat-header"><Hash size={23} /><div><h2>프로젝트 라운지</h2><p>rfice 메시지 목록 · mock 데이터</p></div><span><Users size={15} /> 5</span></header><MessageList roomID="rfice-performance-room" variant="fullSize" isMyRoom={false} /><MessageComposer /></section><PerformancePanel /></div>
+    </MockChatProvider></ThemeProvider>
+    <details className="rf-scope"><summary>이식 범위와 측정 조건</summary><p>rfice-zero의 full-size 메시지 경로를 이식했습니다. Message의 JSON 파싱·memo 비교, 리치텍스트 렌더러, 40개 페이지 누적, 비가상화 목록, 날짜/작성자 그룹 판정 및 스크롤 감지를 유지합니다. 처음에는 최신 40개만 요청하고, 위로 스크롤하면 커서 기반 mock API를 호출해 이전 메시지를 최대 40개씩 추가합니다. 전체 데이터는 mock 서버에만 보관합니다.</p><p>서버·사용자·첨부 파일은 로컬 mock입니다. 채팅 항목의 서비스 연동 및 일부 UI, 디자인 시스템, 입력창은 어댑터로 대체했습니다. Quill 입력·통화·투표·게임·실서버·전체 rfice 앱의 부하는 포함하지 않으므로 원본 앱 전체의 성능 수치와 동일하지 않습니다.</p><p>측정 중에는 탭과 창 크기를 유지하세요. 개발 모드는 StrictMode와 개발 코드의 영향을 받습니다. production 비교: <code>npm run build &amp;&amp; npm run preview -- --port 5180</code></p></details>
+  </div>;
 }

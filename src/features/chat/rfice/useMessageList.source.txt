@@ -1,0 +1,375 @@
+/**
+ * @copyright (C) 2023, rsupport. All rights reserved
+ *
+ * @license
+ * This software and/or source code may be used, copied and/or disseminated only
+ * with the written permission of rsupport, or in accordance with the terms
+ * and conditions stipulated in the agreement/contract under which the software
+ * and/or source code has been supplied by rsupport or its affiliates.
+ * Unauthorized use, copying, or dissemination of this file, via any medium, is
+ * strictly prohibited, and will constitute an infringement of copyright.
+ *
+ * @author
+ * SoonKi Min (skmin@rsupport.com)
+ *
+ * @description
+ *
+ * @created at Tue Sep 26 2023
+ **/
+
+import { useEffect, useMemo } from "react";
+import { Updater, useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useShallow } from "zustand/react/shallow";
+
+import { useStompClient } from "@/frameworks/libraries/network";
+import { Configure } from "@/frameworks/libraries/utilities";
+import { useChatDataStore } from "@/modules/chat/store";
+import { useEventHandlers } from "@rfice/eventhandler";
+
+import { Topics } from "../../commons";
+import { useChat } from "../../API/user";
+import { useChatRoomActions } from "../useChatRoom";
+import { useMessageListHandler } from "./private";
+import { usePersistUser } from "../../persistence";
+
+export type Message = Omit<WebServices.Chat.Messages.Data["content"][number], "searchMessage"> & {
+	clientMessageId?: string;
+};
+export type MessageList = Record<string, Message>;
+export type ThreadMessageList = Record<
+	string,
+	Omit<WebServices.Chat.Messages.Data["content"][number], "searchMessage">
+>;
+type SpaceChatListMap = Map<string, WebServices.SpaceChat.List.Data[number]>;
+type DMListMap = Map<string, WebServices.DirectMessage.List.Data[number]>;
+
+// TODO: 일반채팅과 쓰레드채팅 중복기능으로 쓰레드채팅 카운트 증가 방지
+export default function useMessageList(exceptThread: boolean, channelID: string, threadID?: string) {
+	const chatAPI = useChat();
+	const myInfo = usePersistUser("me");
+	const chatRoomActions = useChatRoomActions();
+
+	const {
+		messageReacted,
+		messageSent,
+		messageUpdated,
+		messageDeleted,
+		messageFileDeleted,
+		messageBookmarked,
+		messageFileCreated
+	} = useMessageListHandler(channelID, threadID);
+
+	const {
+		data: roomData,
+		status: joinStatus,
+		refetch: joinRoom,
+		remove: exitRoom
+	} = useQuery(["joinRoom", channelID], {
+		queryFn: async () => await chatRoomActions.common.join(channelID),
+		refetchOnWindowFocus: false,
+		refetchOnMount: false,
+		refetchOnReconnect: true,
+		cacheTime: 0,
+		retry: 5,
+		retryDelay: 500,
+		staleTime: 0
+	});
+
+	const { chatSearchTextId, isSearch, setIsSearch } = useChatDataStore(
+		useShallow((state) => ({
+			chatSearchTextId: state.chat_search_selected,
+			isSearch: state.chat_searching[roomData?.roomId || ""] ?? false,
+			setIsSearch: state.set_chat_searching
+		}))
+	);
+
+	// 공간채팅일 경우 게스트는 이전 채팅이 보여지지 않아야 한다는 조건
+	const isGuestOnSpaceChat =
+		myInfo.authority === "GUEST" && (roomData?.roomType === "CHANNEL" || roomData?.roomType === "OPEN_WORLD");
+
+	const {
+		fetchNextPage,
+		hasNextPage,
+		data,
+		isFetchedAfterMount,
+		refetch: MessageRefetch,
+		remove: MessageRemove,
+		...rest
+	} = useInfiniteQuery<ChatState.QueryMessageList>(["useMessageList", channelID], {
+		queryFn: async ({ pageParam = undefined }) => {
+			if (isSearch && pageParam === undefined) {
+				return { nextPage: undefined };
+			}
+
+			const order = pageParam?.order ?? "DESC";
+
+			const { data: result } = await chatAPI.messages.execute({
+				roomId: channelID,
+				cursorId: pageParam?.id,
+				order: order,
+				pageSize: 40,
+				includeCursorId: Boolean(chatSearchTextId)
+			});
+
+			return {
+				nextPage: result?.content.slice(-1)[0]?.roomMessageId,
+				...result
+			};
+		},
+		refetchOnWindowFocus: false,
+		refetchOnMount: false,
+		refetchOnReconnect: true,
+		retry: 5,
+		retryDelay: 500,
+		//@description - enabled
+		//상대방의 마이룸에 진입했을 경우 이전 채팅이 보여지지 않아야한다는 요구사항에 맞춘 조건
+		enabled:
+			joinStatus === "success" &&
+			!(roomData?.roomType === "MY_ROOM" && myInfo.myRoomId !== roomData?.spaceId) &&
+			!isGuestOnSpaceChat,
+		getNextPageParam: (lastPage) => (lastPage.nextPage ? { id: lastPage.nextPage, order: "DESC" } : undefined)
+	});
+
+	const {
+		data: threadData,
+		hasNextPage: threadHasNextPage,
+		refetch: ThreadRefetch,
+		refetch: threadRefetch,
+		remove: ThreadRemove,
+		isLoading: threadIsLoading
+	} = useInfiniteQuery<ChatState.QueryMessageThreadList>(["useThreadList", channelID, threadID], {
+		queryFn: async () => {
+			const { data: result } = await chatAPI.getThread.execute({
+				roomID: channelID,
+				type: "GENERAL", //TODO 투표일떄도 고려
+				threadMessageId: threadID,
+				pageSize: 100 // 임시코드, 현재 40개 fix로 로드되는 문제가 있음. infinite scroll 적용 예정
+			});
+			return {
+				root: result?.root,
+				...result
+			};
+		},
+		refetchOnWindowFocus: false,
+		refetchOnMount: false,
+		refetchOnReconnect: true,
+		retry: 5,
+		retryDelay: 500,
+		enabled: !!threadID
+	});
+
+	// useInfiniteQuery 초기화
+	useEffect(() => {
+		return () => {
+			if (joinStatus === "success" && !threadID) {
+				MessageRemove();
+				MessageRefetch();
+			}
+			if (joinStatus === "success" && threadID) {
+				ThreadRefetch();
+				ThreadRemove();
+			}
+		};
+	}, []);
+
+	// 검색 여부 초기화
+	useEffect(() => {
+		return () => {
+			if (roomData) {
+				setIsSearch(roomData.roomId, false);
+			}
+		};
+	}, [roomData]);
+
+	const messageList = useMemo(
+		() =>
+			data?.pages
+				.flatMap((page) => page.content)
+				.filter((content) => content?.roomId === channelID)
+				.reduce((total, current) => {
+					if (!current) return total;
+					//@ts-ignore
+					const uniqueId = current?.clientMessageId;
+					if (uniqueId) {
+						Object.keys(total).map((key) => {
+							const messageData = total[key];
+							if (messageData.roomMessageId === "" && messageData?.clientMessageId === uniqueId) {
+								delete total[key];
+							}
+						});
+					}
+					total[current.roomMessageId] = current;
+					return total;
+				}, {} as MessageList) ?? {},
+		[data, threadData]
+	);
+
+	const threadMessageRoot = threadData?.pages.flatMap((page) => page.root)[0];
+	const threadMessageList =
+		threadData?.pages
+			.flatMap((page) => page.content)
+			.filter((content) => content?.roomId === channelID)
+			.reduce((total, current) => {
+				if (!current) return total;
+				//@ts-ignore
+				const uniqueId = current?.clientMessageId;
+				if (uniqueId) {
+					Object.keys(total).map((key) => {
+						const messageData = total[key];
+						if (messageData.roomMessageId === "" && messageData?.clientMessageId === uniqueId) {
+							delete total[key];
+						}
+					});
+				}
+
+				total[current.roomMessageId] = current;
+
+				return total;
+			}, {} as MessageList) ?? {};
+
+	const threadCount = useMemo(() => Object.keys(threadMessageList).length, [threadID, threadMessageList]);
+
+	useStompClient(
+		{
+			onMessageReceived(message, topic) {
+				// console.debug("#useMessageList# onMessageReceived", message);
+				if (
+					topic !== Topics.Common &&
+					topic !== Topics.Room(channelID) &&
+					topic !== Topics.Room("#") &&
+					topic !== Topics.Controls
+				) {
+					return;
+				}
+				switch (message.type) {
+					case "messageReacted": {
+						messageReacted(message.payload as ChatServices.Server.MessageReacted.Data);
+						break;
+					}
+					case "messageSent": {
+						// console.debug("#useMessageList# onMessageReceived:messageSent", message);
+						messageSent(message.payload as ChatServices.Server.MessageSent.Data, exceptThread);
+						break;
+					}
+					case "messageDeleted": {
+						messageDeleted(message.payload as ChatServices.Server.MessageDeleted.Data);
+						break;
+					}
+					case "messageFileDeleted": {
+						messageFileDeleted(message.payload as ChatServices.Server.MessageFileDeleted.Data);
+						break;
+					}
+					case "messageUpdated": {
+						messageUpdated(message.payload as ChatServices.Server.MessageUpdated.Data);
+						break;
+					}
+					case "messageBookmarked": {
+						messageBookmarked(message.payload as ChatServices.Server.MessageBookmarked.Data);
+						break;
+					}
+					case "messageFileCreated": {
+						messageFileCreated(message.payload as ChatServices.Server.MessageFileCreated.Data);
+						break;
+					}
+				}
+			}
+		},
+		[messageList, channelID, Configure.chatLanguage]
+	);
+
+	useEffect(() => {
+		return () => {
+			exitRoom();
+		};
+	}, []);
+
+	const queryClient = useQueryClient();
+
+	const setChatRoomList = (updater: Updater<DMListMap | undefined, DMListMap | undefined>) => {
+		queryClient.setQueryData<DMListMap>(["getDMList"], updater);
+	};
+	const setSpaceChatRoomList = (updater: Updater<SpaceChatListMap | undefined, SpaceChatListMap | undefined>) => {
+		queryClient.setQueryData<SpaceChatListMap>(["getSpaceChatList"], updater);
+	};
+
+	const spaceChatListFetchState = queryClient.getQueryState(["getSpaceChatList"]);
+
+	useEffect(() => {
+		if (spaceChatListFetchState?.fetchStatus === "idle") {
+			joinRoom();
+		}
+	}, [spaceChatListFetchState?.fetchStatus]);
+
+	const updateRoomUsers = () => {
+		if (!roomData) return;
+		if (roomData?.spaceId) {
+			setSpaceChatRoomList((prev) => {
+				if (!prev || !roomData.spaceId) return prev;
+				const space = prev.get(roomData.spaceId);
+				if (!space) return prev;
+
+				// 해당 룸의 유저를 채우기 위한 코드로 파악되는데 유저외의 다른 데이터도 바뀌게 되어 유저만 변경되도록 수정
+				const newRooms = space.rooms.map((room) => {
+					if (room.roomId === roomData.roomId) {
+						return {
+							...room,
+							users: roomData.users
+						};
+					}
+					return room;
+				});
+				prev.set(roomData.spaceId, { ...space, rooms: newRooms });
+				return new Map(prev);
+			});
+		} else {
+			// 오디오존은 리스트에 셋팅 하지 않음
+			if (roomData.roomType === "AUDIO_ZONE") return;
+			// 해당 룸의 유저를 채우기 위한 코드로 파악되는데 유저외의 다른 데이터도 바뀌게 되어 유저만 변경되도록 수정
+			setChatRoomList((prev) => {
+				if (!prev) return prev;
+				const dmData = prev.get(roomData.roomId);
+				if (!dmData) return prev;
+				prev.set(roomData.roomId, {
+					...dmData,
+					users: roomData.users
+				});
+				return new Map(prev);
+			});
+		}
+	};
+
+	useEventHandlers(
+		{
+			async onNetworkSubscribing() {
+				if ((await joinRoom()).status === "success" && roomData) {
+					updateRoomUsers();
+				}
+			}
+		},
+		[roomData]
+	);
+
+	useEffect(() => {
+		updateRoomUsers();
+	}, [roomData]);
+
+	return {
+		/**
+		 * key는 timestamp입니다.
+		 */
+		messageList,
+		threadMessageRoot,
+		threadMessageList,
+		threadHasNextPage,
+		threadRefetch,
+		status: { hasNextPage, ...rest },
+		joinStatus,
+		joinRoom,
+		isFetchedAfterMount,
+		refetchMessage: MessageRefetch,
+		getNextPage: fetchNextPage,
+		formatMessage: MessageRemove,
+		threadCount,
+		threadIsLoading
+	};
+}

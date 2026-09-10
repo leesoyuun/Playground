@@ -12,7 +12,7 @@ export default defineConfig({
     launchOptions: { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH },
   },
   webServer: {
-    command: `npm run dev -- --port ${port} --strictPort`,
+    command: `npm run ${process.env.PLAYWRIGHT_PREVIEW === '1' ? 'preview' : 'dev'} -- --port ${port} --strictPort`,
     url: baseURL,
     reuseExistingServer: false,
   },

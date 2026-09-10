@@ -10,11 +10,10 @@ test('home cards navigate to isolated experiments and browser history works', as
   await expect(page).toHaveURL(/\/chat$/);
   await page.getByRole('textbox', { name: '메시지', exact: true }).fill('실험 메시지');
   await page.getByRole('button', { name: '메시지 전송' }).click();
-  await expect(page.getByText('보내주신 메시지: 실험 메시지', { exact: true })).toBeVisible();
-  await page.getByLabel('응답 방식').selectOption('fixed');
+  await expect(page.getByText('실험 메시지', { exact: true })).toBeVisible();
   await page.getByRole('textbox', { name: '메시지', exact: true }).fill('<script>alert(1)</script>');
   await page.getByRole('button', { name: '메시지 전송' }).click();
-  await expect(page.getByText('메시지를 받았어요. 이 응답을 원하는 로직으로 바꿔보세요!', { exact: true })).toBeVisible();
+  await expect(page.getByText('<script>alert(1)</script>', { exact: true })).toBeVisible();
   await page.reload();
   await expect(page.getByRole('heading', { name: /채팅 실험실/ })).toBeVisible();
   await page.goBack();

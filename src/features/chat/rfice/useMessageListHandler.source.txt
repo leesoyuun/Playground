@@ -1,0 +1,424 @@
+/**
+ * @copyright (C) 2024, rsupport. All rights reserved
+ *
+ * @license
+ * This software and/or source code may be used, copied and/or disseminated only
+ * with the written permission of rsupport, or in accordance with the terms
+ * and conditions stipulated in the agreement/contract under which the software
+ * and/or source code has been supplied by rsupport or its affiliates.
+ * Unauthorized use, copying, or dissemination of this file, via any medium, is
+ * strictly prohibited, and will constitute an infringement of copyright.
+ *
+ * @author
+ * SoonKi Min (skmin@rsupport.com)
+ *
+ * @description
+ *
+ * @created at Thu May 30 2024
+ **/
+
+import { InfiniteData, Updater, useQueryClient } from "@tanstack/react-query";
+import produce from "immer";
+
+import { useCheckVersion } from "@/frameworks/libraries/components";
+import { Configure } from "@/frameworks/libraries/utilities";
+import { useChat } from "@/frameworks/core/API";
+
+import { Message, MessageList } from "./types";
+import { translateMessage, updateMessageWithReactions } from "./utils";
+
+type MessageListQueryData =
+	| InfiniteData<{
+			content?: SwaggerModels.ChatMessageListResponseVO[] | undefined;
+			hasNext?: boolean | undefined;
+			totalCount?: number | undefined;
+			nextPage: string | undefined;
+	  }>
+	| undefined;
+
+type ThreadMessageListQueryData =
+	| InfiniteData<{
+			root: SwaggerModels.ChatMessageListResponseVO;
+			content?: SwaggerModels.ChatMessageListResponseVO[] | undefined;
+			hasNext?: boolean | undefined;
+			totalCount?: number | undefined;
+			nextPage: string | undefined;
+	  }>
+	| undefined;
+
+export default function useMessageListHandler(roomID: string, threadID?: string) {
+	const queryClient = useQueryClient();
+	const gvt = useCheckVersion({ allows: "gvt" });
+	const chatAPI = useChat();
+
+	const setQueryCache = (updater: Updater<MessageListQueryData | undefined, MessageListQueryData | undefined>) => {
+		const current = queryClient.getQueryData<MessageListQueryData>(["useMessageList", roomID]);
+
+		if (!current) {
+			queryClient.setQueryData<MessageListQueryData>(["useMessageList", roomID], {
+				pages: [{ content: [], nextPage: undefined }],
+				pageParams: [undefined]
+			});
+		}
+
+		queryClient.setQueryData<MessageListQueryData>(["useMessageList", roomID], updater);
+	};
+
+	const setThreadQueryCache = (updater: Updater<ThreadMessageListQueryData, ThreadMessageListQueryData>) => {
+		queryClient.setQueryData(["useThreadList", roomID, threadID], updater);
+	};
+
+	const messageReacted = (payload: ChatServices.Server.MessageReacted.Data) => {
+		setQueryCache((prev) =>
+			produce(prev, (draft) => {
+				draft?.pages.forEach((page) => {
+					page.content?.forEach((content, index) => {
+						if (content.roomMessageId === payload.reaction.messageId && !threadID) {
+							if (page.content) page.content[index] = updateMessageWithReactions(content, payload);
+						}
+					});
+				});
+			})
+		);
+
+		setThreadQueryCache((prev) =>
+			produce(prev, (draft) => {
+				draft?.pages.forEach((page) => {
+					page.content?.forEach((content, index) => {
+						if (content.roomMessageId === payload.reaction.messageId) {
+							if (page.content) page.content[index] = updateMessageWithReactions(content, payload);
+						}
+					});
+				});
+			})
+		);
+	};
+
+	// TODO: 일반채팅과 쓰레드채팅 중복기능으로 쓰레드채팅 카운트 증가 방지
+	const messageSent = async (payload: ChatServices.Server.MessageSent.Data, exceptThread: boolean = false) => {
+		const sender = payload.sender as ChatServices.Member;
+
+		const createNewMessage = async (content: string) => {
+			const { ...restPayload } = payload;
+
+			const result: Omit<Message, "messageType" | "thread"> = {
+				...restPayload,
+				roomMessageId: payload.messageId,
+				user: sender,
+				emergency: payload.emergency,
+				content,
+				messageUpdated: false,
+				deleted: false,
+				createdAt: payload.timestamp,
+				isMe: sender.id === Configure.userID,
+				reactions: [],
+				bookmarked: false
+			};
+
+			if (payload.replyRoomMessage) {
+				const { replyRoomMessage } = payload;
+
+				result.replyMessage = {
+					content: replyRoomMessage.message,
+					roomMessageId: replyRoomMessage.messageId,
+					senderId: replyRoomMessage.senderId,
+					senderName: replyRoomMessage.senderName,
+					deleted: false,
+					files: replyRoomMessage.files
+				};
+			}
+
+			if (payload?.voteId) {
+				// 투표 메세지를 받을때 투표에 대한 정보는 api 호출하여 처리 ( 백엔드 설계가 그렇게 되어있음. )
+				const { data } = await chatAPI.vote.detail.execute({ voteId: payload.voteId, roomId: payload.roomId });
+				result.vote = data as MessageList[number]["vote"];
+			}
+
+			return result as Message;
+		};
+
+		let message: Message;
+		if (gvt.allowed && Configure.chatLanguage && sender.id !== Configure.userID) {
+			const translatedChat = await translateMessage(payload.message, Configure.chatLanguage);
+			message = await createNewMessage(JSON.stringify(translatedChat));
+		} else {
+			message = await createNewMessage(payload.message);
+		}
+
+		if (payload.thread) {
+			setThreadQueryCache((prev) =>
+				produce(prev, (draft) => {
+					draft?.pages.forEach((page) => {
+						// 현재 열려있는 스레드 창이 동일한 창이 아니라면 추가하지 않는다
+						const threadMessageId = payload.thread?.messageId;
+						const rootMessageId = page.root.roomMessageId;
+						if (threadMessageId !== rootMessageId) return;
+
+						if (!page.content) return;
+						page.content = [...page.content, message];
+					});
+				})
+			);
+
+			// 일반채팅과 쓰레드채팅 중복기능으로 쓰레드채팅 카운트 증가 방지
+			if (exceptThread) return;
+
+			setQueryCache((prev) =>
+				produce(prev, (draft) => {
+					draft?.pages.forEach((page) => {
+						if (!page.content) return;
+
+						page.content = page.content.map((msg) => {
+							if (msg.roomMessageId === payload.thread?.messageId) {
+								return {
+									...msg,
+									thread: {
+										...(msg.thread || {}),
+										count: (msg.thread?.count || 0) + 1,
+										messageLastSentTime: Date.now()
+									}
+								};
+							}
+							return msg;
+						});
+					});
+				})
+			);
+		} else {
+			setQueryCache((prev) =>
+				produce(prev, (draft) => {
+					draft?.pages.forEach((page) => {
+						if (!page.content) return;
+						page.content = [...page.content, message];
+					});
+				})
+			);
+		}
+	};
+
+	const messageDeleted = (payload: ChatServices.Server.MessageDeleted.Data) => {
+		if (payload.roomId !== roomID) return;
+
+		setThreadQueryCache((prev) =>
+			produce(prev, (draft) => {
+				draft?.pages.forEach((page) => {
+					page.content?.forEach((content) => {
+						if (content.roomMessageId === payload.messageId) {
+							content.deleted = true;
+						}
+					});
+				});
+			})
+		);
+
+		setQueryCache((prev) =>
+			produce(prev, (draft) => {
+				draft?.pages.forEach((page) => {
+					page.content?.forEach((content) => {
+						if (content.roomMessageId === payload.messageId) {
+							content.deleted = true;
+						}
+					});
+				});
+			})
+		);
+
+		payload.replyReferencedMessageIds.forEach((messageId) => {
+			setQueryCache((prev) =>
+				produce(prev, (draft) => {
+					draft?.pages.forEach((page) => {
+						page.content?.forEach((content) => {
+							if (content.roomMessageId !== messageId) return;
+							const replyMessage = content.replyMessage;
+							if (replyMessage) {
+								replyMessage.deleted = true;
+							}
+						});
+					});
+				})
+			);
+		});
+	};
+
+	const messageFileDeleted = (payload: ChatServices.Server.MessageFileDeleted.Data) => {
+		if (payload.roomId !== roomID) return;
+
+		setQueryCache((prev) =>
+			produce(prev, (draft) => {
+				draft?.pages.forEach((page) => {
+					page.content?.forEach((content) => {
+						if (content.roomMessageId !== payload.messageId) return;
+
+						content.files = content.files?.filter((file) => file.fileBoxId !== payload.fileBoxId);
+					});
+				});
+			})
+		);
+
+		payload.replyReferencedMessageIds.forEach((messageId) => {
+			setQueryCache((prev) =>
+				produce(prev, (draft) => {
+					draft?.pages.forEach((page) => {
+						page.content?.forEach((content) => {
+							if (content.roomMessageId !== messageId) return;
+							const replyMessage = content.replyMessage;
+							if (!replyMessage) return;
+							replyMessage.files = replyMessage.files?.filter(
+								(file) => file.fileBoxId !== payload.fileBoxId
+							);
+						});
+					});
+				})
+			);
+		});
+	};
+
+	const messageUpdated = async (payload: ChatServices.Server.MessageUpdated.Data) => {
+		if (payload.roomId !== roomID) return;
+
+		const { message } = payload;
+		let voteData: MessageList[number]["vote"];
+		let isUpdatedVoteMessage = false;
+		if (payload?.voteId) {
+			const { data } = await chatAPI.vote.detail.execute({ voteId: payload.voteId, roomId: payload.roomId });
+			voteData = data as MessageList[number]["vote"];
+
+			/**
+			 * Update 07/01/2025: Fix bug when participating in a vote, (fixed) message is displayed.
+			 * Because the properties messageUpdated don't return from response of voteData so
+			 * the status updated of vote message will get from the API get details message instead of auto assign true
+			 * @Ticket: 229323
+			 */
+			const { data: listMessage } = await chatAPI.messages.execute({
+				roomId: payload?.roomId,
+				cursorId: payload?.messageId,
+				includeCursorId: true
+			});
+			if (listMessage?.content && listMessage.content?.length > 0) {
+				const { content } = listMessage;
+				const messageDetails = content.find((item) => item.roomMessageId === payload?.messageId);
+				isUpdatedVoteMessage = messageDetails?.messageUpdated ?? false;
+			}
+		}
+
+		setThreadQueryCache((prev) =>
+			produce(prev, (draft) => {
+				draft?.pages.forEach((page) => {
+					if (page.root?.roomMessageId === payload.messageId) {
+						page.root.content = message;
+						page.root.messageUpdated = true;
+					}
+
+					page.content?.forEach((content) => {
+						if (content.roomMessageId !== payload.messageId) return;
+
+						content.content = message;
+						content.messageUpdated = true;
+
+						if (content.vote) {
+							content.vote = voteData;
+							content.messageUpdated = isUpdatedVoteMessage;
+						}
+					});
+				});
+			})
+		);
+
+		setQueryCache((prev) =>
+			produce(prev, (draft) => {
+				draft?.pages.forEach((page) => {
+					page.content?.forEach((content) => {
+						if (content.roomMessageId !== payload.messageId) return;
+
+						content.content = message;
+						content.messageUpdated = true;
+						if (content.vote) {
+							content.vote = voteData;
+							content.messageUpdated = isUpdatedVoteMessage;
+						}
+					});
+				});
+			})
+		);
+
+		payload.replyReferencedMessageIds.forEach((messageId) => {
+			setQueryCache((prev) =>
+				produce(prev, (draft) => {
+					draft?.pages.forEach((page) => {
+						page.content?.forEach((content) => {
+							if (content.roomMessageId !== messageId) return;
+
+							const replyMessage = content.replyMessage;
+							if (!replyMessage) return;
+
+							replyMessage.content = payload.message;
+						});
+					});
+				})
+			);
+		});
+	};
+
+	const messageBookmarked = (payload: ChatServices.Server.MessageBookmarked.Data) => {
+		if (payload.roomId !== roomID) return;
+
+		setThreadQueryCache((prev) =>
+			produce(prev, (draft) => {
+				draft?.pages.forEach((page) => {
+					page.content?.forEach((content) => {
+						if (content.roomMessageId === payload.messageId) {
+							content.bookmarked = payload.bookmarked;
+						}
+					});
+				});
+			})
+		);
+
+		setQueryCache((prev) =>
+			produce(prev, (draft) => {
+				draft?.pages.forEach((page) => {
+					page.content?.forEach((content) => {
+						if (content.roomMessageId === payload.messageId) {
+							content.bookmarked = payload.bookmarked;
+						}
+					});
+				});
+			})
+		);
+	};
+
+	const messageFileCreated = (payload: ChatServices.Server.MessageFileCreated.Data) => {
+		if (payload.roomId !== roomID) return;
+
+		setQueryCache((prev) =>
+			produce(prev, (draft) => {
+				draft?.pages.forEach((page) => {
+					page.content?.forEach((content) => {
+						if (content.roomMessageId === payload.messageId) {
+							const newFile = {
+								fileBoxId: payload.fileBoxId,
+								data: payload.data
+							};
+
+							if (!content.files) {
+								content.files = [];
+							}
+
+							content.files.push(newFile);
+						}
+					});
+				});
+			})
+		);
+	};
+
+	return {
+		messageReacted,
+		messageSent,
+		messageUpdated,
+		messageDeleted,
+		messageFileDeleted,
+		messageBookmarked,
+		messageFileCreated
+	};
+}

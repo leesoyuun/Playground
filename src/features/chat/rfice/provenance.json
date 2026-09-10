@@ -1,0 +1,168 @@
+{
+  "repository": "rfice-fe/rfice-zero",
+  "commit": "06d5222a2d3d8bd4d742db685fcf59757ecb6fd6",
+  "files": [
+    {
+      "source": "packages/apps/main/src/frameworks/libraries/components/Each.tsx",
+      "target": "Each.tsx",
+      "sourceSha256": "05cc56ad237c9311f3a71f7a061ef0b3cbadecdaee80586c22cf89ae4276664a",
+      "adapted": true
+    },
+    {
+      "source": "packages/apps/main/src/frameworks/libraries/components/Choice.tsx",
+      "target": "Choice.tsx",
+      "sourceSha256": "b0274b177b80015dd9dd59b1d6de18dcb31724f24576fffb2b22be3c453979d4",
+      "adapted": true
+    },
+    {
+      "source": "packages/apps/main/src/frameworks/libraries/components/Maybe.tsx",
+      "target": "Maybe.tsx",
+      "sourceSha256": "48f79a1fb4efabc380e6990ea03c0db8a79ae2774cf01c621b891740593bf8fe",
+      "adapted": true
+    },
+    {
+      "source": "packages/apps/main/src/frameworks/core/components/Chat/private/utils/formatRichText.ts",
+      "target": "formatRichText.ts",
+      "sourceSha256": "9030dde951011940b93678a1fb1aae08e4bb080b07586e3ea161c3ddd8589682",
+      "adapted": false
+    },
+    {
+      "source": "packages/apps/main/src/frameworks/core/components/Chat/private/components/RenderItem/Text.tsx",
+      "target": "Text.tsx",
+      "sourceSha256": "9fb907f6f7afc2ef18fe55f7c7d0b329e7504020cbe180f22d74389dacde1368",
+      "adapted": false
+    },
+    {
+      "source": "packages/apps/main/src/frameworks/core/components/Chat/private/components/RenderItem/List.tsx",
+      "target": "List.tsx",
+      "sourceSha256": "9c8a701e58c618f0f59f0a945af4739013d34225f65ac0b567ed8fa58cca4c0b",
+      "adapted": false
+    },
+    {
+      "source": "packages/apps/main/src/frameworks/core/components/Chat/private/components/RenderItem/BlockQuote.tsx",
+      "target": "BlockQuote.tsx",
+      "sourceSha256": "4930f1bf24d38cb0e0cfbe532bead58d3fee7623b6d6ab49898123480bbfc57e",
+      "adapted": false
+    },
+    {
+      "source": "packages/apps/main/src/frameworks/core/components/Chat/private/components/RenderItem/CodeBlock.tsx",
+      "target": "CodeBlock.tsx",
+      "sourceSha256": "61d507a004345270a44762025802ef1d8de53e2adc532fc7f451d1e3b07f009c",
+      "adapted": false
+    },
+    {
+      "source": "packages/apps/main/src/frameworks/core/components/Chat/private/components/RenderItem/Section.tsx",
+      "target": "Section.tsx",
+      "sourceSha256": "674fbb8008df63bb714dc9017e60e4ed50c6ee3e5de9d4b0a489c690d83205cc",
+      "adapted": true
+    },
+    {
+      "source": "packages/apps/main/src/frameworks/core/components/Chat/private/components/RenderItem/RenderItem.tsx",
+      "target": "RenderItem.tsx",
+      "sourceSha256": "892379b84be1ce3ce56e8c8726daa474239d41113dfb68633d3e61106366613c",
+      "adapted": false
+    },
+    {
+      "source": "packages/apps/main/src/modules/chat/components/Common/MessageList/private/utils/checkIsMessageGroup.ts",
+      "target": "checkIsMessageGroup.ts",
+      "sourceSha256": "fc2614c5fe54d28028a0a3ec57f73098701ed21af0fb962b2a19a039efbe8987",
+      "adapted": true
+    },
+    {
+      "source": "packages/apps/main/src/frameworks/libraries/hooks/useIntersectionObserver.ts",
+      "target": "useIntersectionObserver.ts",
+      "sourceSha256": "e47b9f45e4af9710a1deed4d9b6947f030f6570fd9d5a1f0973b8bcdbd936274",
+      "adapted": true
+    },
+    {
+      "source": "packages/apps/main/src/modules/chat/components/Common/MessageList/private/hooks/useHasScroll.ts",
+      "target": "useHasScroll.ts",
+      "sourceSha256": "8d2e26255bb786608283348521a0be1f51595c8d51d4ca11f314189422ff4d18",
+      "adapted": true
+    },
+    {
+      "source": "packages/apps/main/src/modules/chat/components/Common/MessageList/private/hooks/useScrollButtonState.ts",
+      "target": "useScrollButtonState.ts",
+      "sourceSha256": "2c9d911d429de2c6757b3877e6aadabb44bc726a726d3c733f7eb2086e7e996f",
+      "adapted": false
+    },
+    {
+      "source": "packages/apps/main/src/modules/chat/components/Common/MessageList/private/components/Message.tsx",
+      "target": "Message.tsx",
+      "sourceSha256": "2a1e6f1cdc1fa1c26a5b0d95c63e7bafdea3253997b7bc62621807f879b305c1",
+      "adapted": true
+    },
+    {
+      "source": "packages/apps/main/src/frameworks/core/components/Chat/ChatRenderer.tsx",
+      "target": "ChatRenderer.tsx",
+      "sourceSha256": "bcf3591db488618f2fcb288c1c311f4418f412ccf980f82ef01a43a3d9662e75",
+      "adapted": true
+    },
+    {
+      "source": "packages/apps/main/src/modules/chat/components/Common/MessageList/MessageList.tsx",
+      "target": "MessageList.source.txt",
+      "sourceSha256": "ede01c269f02515a74961c43f5bf6fdc54d188fc3ad2adc06eb5625a2859c24c",
+      "adapted": false
+    },
+    {
+      "source": "packages/apps/main/src/frameworks/core/chat/useMessageList/useMessageList.ts",
+      "target": "useMessageList.source.txt",
+      "sourceSha256": "494d89bf768f7c70d0378af0ebab42ab6099dc0b88ed1455f6878388fb2db906",
+      "adapted": false
+    },
+    {
+      "source": "packages/apps/main/src/modules/chat/components/SidebarContents/ChatView/ChatItem/ChatItem.tsx",
+      "target": "ChatItem.source.txt",
+      "sourceSha256": "71b47ed3eab8f77feaea1740e87ed518e3aa743e84c343bf614b8f7c13819b0e",
+      "adapted": false
+    },
+    {
+      "source": "packages/apps/main/src/modules/chat/components/SidebarContents/ChatView/ChatItem/private/components/Message.tsx",
+      "target": "ItemMessage.source.txt",
+      "sourceSha256": "c7fa133a1d26a96e081d6fd3db35718303fe4033ba877ed29e70122ecd3aa098",
+      "adapted": false
+    },
+    {
+      "source": "packages/apps/@types/chatservices/format.d.ts",
+      "target": "format.d.ts",
+      "sourceSha256": "a084b3d638b7d064c575ad6c0a0e474d14f01f0b2a0772d3ce72ec43e338eefe",
+      "adapted": false
+    },
+    {
+      "source": "packages/apps/main/src/frameworks/core/chat/useMessageList/private/useMessageListHandler.ts",
+      "target": "useMessageListHandler.source.txt",
+      "sourceSha256": "fa49bc16e06773eee78196bed18f247de3afdc728241217a84bd1679e9454472",
+      "adapted": false
+    },
+    {
+      "source": "packages/apps/main/src/modules/chat/components/Common/MessageList/MessageList.tsx",
+      "target": "MessageList.tsx",
+      "sourceSha256": "ede01c269f02515a74961c43f5bf6fdc54d188fc3ad2adc06eb5625a2859c24c",
+      "adapted": true
+    },
+    {
+      "source": "packages/apps/main/src/frameworks/core/chat/useMessageList/useMessageList.ts",
+      "target": "useMessageList.ts",
+      "sourceSha256": "494d89bf768f7c70d0378af0ebab42ab6099dc0b88ed1455f6878388fb2db906",
+      "adapted": true
+    },
+    {
+      "source": "packages/apps/main/src/modules/chat/components/SidebarContents/ChatView/ChatItem/ChatItem.tsx",
+      "target": "ChatItem.tsx",
+      "sourceSha256": "71b47ed3eab8f77feaea1740e87ed518e3aa743e84c343bf614b8f7c13819b0e",
+      "adapted": true
+    }
+  ],
+  "runtimeVersions": {
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "@emotion/react": "11.11.1",
+    "@emotion/styled": "11.14.1",
+    "lodash-es": "4.17.21",
+    "html-react-parser": "5.2.10",
+    "marked": "11.2.0",
+    "@tanstack/react-query": "4.42.0",
+    "zustand": "5.0.9",
+    "immer": "9.0.21"
+  }
+}

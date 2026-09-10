@@ -1,0 +1,347 @@
+/**
+ * @copyright (C) 2024, rsupport. All rights reserved
+ *
+ * @license
+ * This software and/or source code may be used, copied and/or disseminated only
+ * with the written permission of rsupport, or in accordance with the terms
+ * and conditions stipulated in the agreement/contract under which the software
+ * and/or source code has been supplied by rsupport or its affiliates.
+ * Unauthorized use, copying, or dissemination of this file, via any medium, is
+ * strictly prohibited, and will constitute an infringement of copyright.
+ *
+ * @author
+ * SoonKi Min (skmin@rsupport.com)
+ *
+ * @description
+ *
+ * @created at Thu Apr 04 2024
+ **/
+
+import { forwardRef, useRef, useState } from "react";
+
+import { Button, Divider, Icon, Row, Tooltip, Typography } from "@/frameworks/designStuff/components";
+import { Maybe, SwitchCase } from "@/frameworks/libraries/components";
+import { _T } from "@rfice/language";
+import { ChatRenderer, GameRenderer, VoteRenderer } from "@/frameworks/core/components";
+
+import { usePersistActions, usePersistUser } from "@/frameworks/core/persistence";
+import useMessageStore from "@/modules/chat/components/Common/MessageInput/MessageStore";
+import { useChatDataStore } from "@/modules/chat/store";
+import { useChatMessageActions, useChatRoomActions, useSpaceChannelState } from "@/frameworks/core/chat";
+import { ChronoUtils, Configure } from "@/frameworks/libraries/utilities";
+
+import { Reply } from "../../../Reply";
+import * as S from "../emotion";
+import ChatReactionList from "./ChatReactionList";
+import { useMiniChatPopup } from "../../../MiniChatPopup/private";
+import ChatBookmarkButton from "./ChatBookmarkButton";
+import ReadedUserList from "../../../ReadedUserList";
+
+type MessageData = WebServices.Chat.Messages.Data["content"][number];
+
+type MessageProps = {
+	user?: MessageData["user"];
+	deleted: boolean;
+	content:
+		| ChatServices.Format2.Container.Richtext
+		| ChatServices.Format2.Container.Vote
+		| ChatServices.Format2.Container.Game;
+	emergency: boolean;
+	roomMessageId: string;
+	roomId: string;
+	threadID?: string;
+	reactions: MessageData["reactions"];
+	isUpdated: boolean;
+	replyMessage?: MessageData["replyMessage"];
+	files?: MessageData["files"];
+	spaceId?: string;
+	variant: ChatUI.Size;
+	vote?: MessageData["vote"];
+	clientMessageId?: string;
+	messageType?: "GENERAL" | "SYSTEM" | "VOTE";
+	thread?: { count: number; messageLastSentTime: number };
+	isRootThread?: boolean;
+	bookmarked?: boolean;
+	lastMessageReadUsers?: WebServices.DirectMessage.GetReaders.Data["users"];
+
+	onClickMessage?: (line: ChatServices.Format2.Elements.AllRichtextElements) => void;
+	onClickThreadIcon?: (ev: React.MouseEvent<HTMLButtonElement>) => void;
+	onClickEmojiIcon?: (ev: React.MouseEvent<HTMLButtonElement>) => void;
+	onClickMoreIcon?: (ev: React.MouseEvent<HTMLButtonElement>) => void;
+	onClickMountRight?: (ev: React.MouseEvent<HTMLButtonElement>) => void;
+	onClickBookmark?: (enable: boolean) => void;
+	onGetChatHTML?: (html?: string) => void;
+};
+
+const Message = forwardRef<HTMLDivElement, MessageProps>((props, ref) => {
+	const [isShowBlockedMessage, setIsShowBlockedMessage] = useState(false);
+	const isResending = useRef(false);
+	const { sendMessage } = useChatMessageActions();
+	const space = useSpaceChannelState(props.spaceId ?? "");
+	const chatRoomActions = useChatRoomActions();
+	const { spaces } = usePersistActions();
+	const { handleClose } = useMiniChatPopup({
+		id: props.roomId,
+		spaceID: props.spaceId,
+		groupID: space?.groupId || "",
+		threadID: props?.roomMessageId
+	});
+
+	const user = usePersistUser(String(props?.user?.id));
+	const isMe = user?.userID === Configure.userID;
+
+	const messageStatus = useMessageStore((state) => {
+		if (props.clientMessageId) {
+			return state.messages[props.clientMessageId]?.status;
+		}
+		return undefined;
+	});
+
+	const showBlockedMessage = () => {
+		setIsShowBlockedMessage(true);
+	};
+
+	const messages = useMessageStore((state) => state.messages);
+
+	const reSendMessage = async (clientMessageId: string | undefined) => {
+		if (!clientMessageId) return;
+		if (isResending.current) return;
+
+		const message = messages[clientMessageId];
+		if (!message || message.status !== "failed") return;
+
+		isResending.current = true;
+
+		const timeout = new Promise((_, reject) => {
+			setTimeout(() => reject(new Error("Timeout")), 5000);
+		});
+
+		try {
+			useMessageStore.getState().updateMessageStatus(clientMessageId, "pending");
+			await Promise.race([sendMessage(message), timeout]);
+			useMessageStore.getState().removeMessage(clientMessageId);
+		} catch (error) {
+			useMessageStore.getState().updateMessageStatus(clientMessageId, "failed");
+		} finally {
+			isResending.current = false;
+		}
+	};
+
+	const deleteLocalMessage = (clientMessageId: string | undefined) => {
+		if (!clientMessageId) return;
+		useMessageStore.getState().removeMessage(clientMessageId);
+	};
+
+	const handleOpenThread = async (isVote?: boolean) => {
+		if (props.variant === "fullSize") {
+			handleClose();
+			useChatDataStore.getState().setThreadID(props.roomMessageId);
+			return;
+		}
+
+		handleClose();
+		if (props.spaceId) {
+			const spaceType = spaces.get_space(props.spaceId)?.feSpaceType;
+			if (spaceType === "OPEN_WORLD") {
+				const room = await chatRoomActions.spaceChat.openworld.join(
+					props.spaceId,
+					spaces.get_space(props.spaceId)?.name || ""
+				);
+				if (!room?.roomId) throw new Error("roomId is not exist");
+			}
+			chatRoomActions.common.open({
+				type: "Space",
+				channelID: props.roomId,
+				spaceID: props.spaceId || "",
+				threadID: props.roomMessageId,
+				isVote
+			});
+		} else {
+			chatRoomActions.common.open({
+				type: "DM",
+				channelID: props.roomId,
+				threadID: props.roomMessageId,
+				isVote
+			});
+		}
+		useChatDataStore.getState().setThreadID(props.roomMessageId);
+	};
+
+	const isBlockedMessage = user?.blockedByMe && !isShowBlockedMessage && !props.emergency;
+	const isRelyMessage = !props.deleted && props.replyMessage;
+	const hasReactions = props.reactions.length > 0;
+
+	const showReactions = hasReactions && !isBlockedMessage && !props.deleted;
+
+	const isEndedVote = props.content.type === "vote" && props.content.elements?.[0]?.key === "end";
+
+	const isOpenWorld = space && space?.spaceType === "OPEN_WORLD";
+	const isMyRoom = space && space?.spaceName === undefined;
+	const isSpaceMessage = props.variant === "transparent";
+	const showBookmarkIcon = !isOpenWorld && !isMyRoom && !isSpaceMessage;
+
+	return (
+		<>
+			{!isBlockedMessage && isRelyMessage && (
+				<div css={{ paddingBottom: "8px", width: "-webkit-fill-available", marginLeft: "38px" }}>
+					<Reply.View id={props.replyMessage?.roomMessageId || ""} reply={props.replyMessage} />
+					<Divider type="line" />
+				</div>
+			)}
+
+			{isBlockedMessage && (
+				<S.Message
+					hover
+					onClick={showBlockedMessage}
+					hasRightMargin={Boolean((props?.lastMessageReadUsers?.length || 0) > 0)}
+				>
+					<Typography typoSize="Body2" typoColor="error_80_100">
+						{_T("차단된 메시지입니다. 탭해서 확인 가능")}
+					</Typography>
+				</S.Message>
+			)}
+
+			{!isBlockedMessage && (
+				<S.Message
+					onClick={props.onClickMountRight}
+					onContextMenu={props.onClickMountRight}
+					hover
+					hasRightMargin={Boolean((props?.lastMessageReadUsers?.length || 0) > 0)}
+				>
+					<Maybe
+						test={!props.deleted}
+						fallback={
+							<Typography typoSize="Body2" typoColor="neutral_80_50">
+								{props.messageType === "VOTE" || props.content.type === "vote"
+									? _T("투표가 삭제되었습니다.")
+									: _T("삭제된 메시지입니다.")}
+							</Typography>
+						}
+					>
+						<SwitchCase
+							condition={props.content.type}
+							cases={{
+								game: (
+									<GameRenderer
+										ref={ref}
+										chatForm={props.content as ChatServices.Format2.GameMessage}
+									/>
+								),
+								vote: (
+									<VoteRenderer
+										ref={ref}
+										chatForm={props.content as ChatServices.Format2.VoteMessage}
+										emergency={props.emergency}
+										vote={props.vote}
+										roomID={props.roomId}
+										spaceID={props.spaceId}
+										voteType={props.content.elements?.[0]?.key}
+										variant={props.variant}
+										threadID={props.threadID}
+										handleOpenThread={handleOpenThread}
+									/>
+								),
+								richtext: (
+									<Row style={{ width: "100%" }}>
+										<ChatRenderer
+											ref={ref}
+											chatForm={props.content as ChatServices.Format2.Message}
+											onClick={props.onClickMessage}
+											emergency={props.emergency}
+											files={props.files}
+											isMe={isMe}
+										/>
+
+										{messageStatus === "failed" && (
+											<Row gap={4}>
+												<S.FailedIconWrapper color={"accent_40_100"}>
+													<Icon
+														name="Refresh24"
+														onClick={() => reSendMessage(props.clientMessageId)}
+														fill="white"
+													/>
+												</S.FailedIconWrapper>
+												<S.FailedIconWrapper color={"error_60_100"}>
+													<Icon
+														name="Delete24"
+														onClick={() => deleteLocalMessage(props.clientMessageId)}
+													/>
+												</S.FailedIconWrapper>
+											</Row>
+										)}
+									</Row>
+								)
+							}}
+						/>
+						{props.isUpdated && (
+							<Typography typoColor="neutral_60_100" typoSize="Body4">
+								({_T("수정됨")})
+							</Typography>
+						)}
+						<Maybe test={!props.isRootThread && messageStatus !== "failed" && !isEndedVote}>
+							<S.HoverIconArea className="chat-icons" verticalAlign="center" gap={4}>
+								<Tooltip message={_T("이모티콘")} hasIcon={false}>
+									<Button.Icon
+										name="Emoji24"
+										size="small_18"
+										onClick={props.onClickEmojiIcon}
+										filled="transparent"
+									/>
+								</Tooltip>
+								{Boolean(!props.threadID) && (
+									<Tooltip message={_T("스레드 남기기")} hasIcon={false}>
+										<Button.Icon
+											name="Threads24"
+											size="small_18"
+											onClick={props.onClickThreadIcon}
+											filled="transparent"
+										/>
+									</Tooltip>
+								)}
+								<Maybe test={showBookmarkIcon}>
+									<Tooltip message={_T("즐겨찾기 추가")} hasIcon={false}>
+										<ChatBookmarkButton
+											messageId={props.roomMessageId}
+											onClickBookmark={props.onClickBookmark}
+										/>
+									</Tooltip>
+								</Maybe>
+								<Maybe test={props.content.type !== "vote"}>
+									<Button.Icon
+										name="More24"
+										size="small_18"
+										onClick={props.onClickMoreIcon}
+										filled="transparent"
+									/>
+								</Maybe>
+							</S.HoverIconArea>
+						</Maybe>
+					</Maybe>
+				</S.Message>
+			)}
+			{/* 읽은 사람 목록 */}
+			{props.lastMessageReadUsers && <ReadedUserList userList={props.lastMessageReadUsers} />}
+
+			{showReactions && !props.isRootThread && (
+				<ChatReactionList reactions={props.reactions} messageID={props.roomMessageId} roomID={props.roomId} />
+			)}
+
+			{props.thread && !props.threadID && !props.deleted && (
+				<S.ThreadBox gap={8} verticalAlign="center">
+					<S.ThreadNumberBox onClick={() => handleOpenThread()}>
+						<Typography typoColor="accent_40_100" typoSize="Body3_MD">
+							{_T("{{number}}개의 댓글", {
+								number: props.thread.count > 100 ? "99+" : props.thread.count
+							})}
+						</Typography>
+					</S.ThreadNumberBox>
+					<Typography typoColor="neutral_60_100" typoSize="Body3">
+						{ChronoUtils.formatTimeChatTime(props.thread.messageLastSentTime)}
+					</Typography>
+				</S.ThreadBox>
+			)}
+		</>
+	);
+});
+
+export default Message;
