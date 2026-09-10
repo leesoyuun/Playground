@@ -1,22 +1,33 @@
-import { useState, type CSSProperties } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowUpRight, Asterisk, Layers, Pause, Play, X, MoveUpRight } from 'lucide-react';
-import { experiments, type Experiment } from '../experiments';
-function orbitStyle(position: Experiment['position'], index: number): CSSProperties & { '--delay': string } {
-  return { ...position, '--delay': `${index * -1.7}s` };
+import { ArrowUpRight, ArrowRight, Asterisk, Search, LayoutGrid, List, X } from 'lucide-react';
+import { experiments } from '../experiments';
+
+const categories = ['전체', '인터페이스', '생산성'] as const;
+const categoryFor = (id: string) => id === 'chat' ? '인터페이스' : '생산성';
+const tags: Record<string, string[]> = { chat: ['Conversation', 'Interaction'], notes: ['Local storage', 'Editor'], timer: ['State', 'Interaction'] };
+
+function Preview({ id }: { id: string }) {
+  return <div className={`card-preview preview-${id}`} aria-hidden="true">
+    <span className="preview-label">{id === 'chat' ? 'LET’S TALK' : id === 'notes' ? 'A LITTLE THOUGHT' : 'MAKE TIME'}</span>
+    {id === 'chat' ? <div className="chat-art"><div className="art-message"><span className="art-avatar"><Asterisk size={18} /></span><span>작은 아이디어 하나 있어요.</span></div><div className="art-reply">좋아요, 일단 만들어볼까요? <span>↗</span></div><div className="art-typing"><i /><i /><i /></div></div>
+      : id === 'notes' ? <div className="note-art"><span className="note-tape" /><span className="note-art-date">NOTE TO SELF — 001</span><strong>생각은 가볍게,<br />가능성은 무한하게.</strong><div className="note-art-check">✓ &nbsp; 일단 적어보기</div><span className="note-scribble">a work in progress ✳</span></div>
+      : <div className="timer-art"><div className="timer-art-ring"><span>FOCUS SESSION</span><strong>05<span>:</span>00</strong><div className="timer-art-play">▶</div></div><span className="timer-art-caption">A SMALL MOMENT OF FOCUS</span></div>}
+    <span className="preview-corner">{id === 'chat' ? 'Aa / 01' : id === 'notes' ? 'Aa / 02' : '00 / 03'}</span>
+  </div>;
 }
+
 export default function HomePage() {
-  const [paused, setPaused] = useState(false);
-  const [list, setList] = useState(false);
-  return <main className={`home ${paused ? 'paused' : ''}`}>
-    <div className="photo-background" style={{ backgroundImage: `url(${import.meta.env.BASE_URL}images/playground.png)` }} /><div className="photo-shade" />
-    <header className="home-header"><Link className="wordmark" to="/"><Asterisk size={30} strokeWidth={2.4} /> playground<span className="version">VOL. 01</span></Link><button className="glass-button" onClick={() => setList(!list)} aria-expanded={list}><Layers size={15} /> 모든 실험 <span className="count">{experiments.length.toString().padStart(2, '0')}</span></button></header>
-    <section className="home-heading"><div className="eyebrow"><span className="green-dot" /> A PLACE FOR SMALL EXPERIMENTS</div><h1>일단, 놀아볼까요<span>?</span></h1><p>떠다니는 아이디어를 클릭하고, 나만의 기능을 실험해보세요.</p></section>
-    <nav className="floating-experiments" aria-label="실험 페이지">
-      {experiments.map(({ id, title, english, icon: Icon, color, position }, index) => <Link className={`experiment-orbit orbit-${id}`} to={`/${id}`} key={id} style={orbitStyle(position, index)}><span className={`floating-icon ${color}`}><Icon size={39} strokeWidth={1.7} /><span className="icon-arrow"><ArrowUpRight size={13} /></span></span><span className="floating-label">{title}<ArrowUpRight size={12} /></span><span className="floating-english">{english}</span></Link>)}
-    </nav>
-    <div className="scene-sticker"><span>TRY SOMETHING<br />JUST BECAUSE.</span><Asterisk size={25} /></div>
-    {list && <aside className="experiment-list"><div className="list-heading">실험 둘러보기<button aria-label="목록 닫기" onClick={() => setList(false)}><X size={17} /></button></div>{experiments.map(({ id, title, description, icon: Icon, color }) => <Link to={`/${id}`} key={id}><span className={`mini-icon ${color}`}><Icon size={20} /></span><span><strong>{title}</strong><small>{description}</small></span><MoveUpRight size={16} /></Link>)}</aside>}
-    <footer className="home-footer"><div><span className="footer-dot" /> NO RULES. JUST CURIOSITY.<small>완성하기 전, 마음껏 시도하는 공간.</small></div><div className="footer-controls"><span>아이콘을 눌러 실험실로 이동하세요</span><button className="glass-button pause-button" onClick={() => setPaused(!paused)} aria-label={paused ? '아이콘 움직임 재생' : '아이콘 움직임 멈추기'} title={paused ? '움직임 재생' : '움직임 멈추기'}>{paused ? <Play size={15} /> : <Pause size={15} />}</button></div></footer>
-  </main>;
+  const [query, setQuery] = useState('');
+  const [category, setCategory] = useState<(typeof categories)[number]>('전체');
+  const [view, setView] = useState<'grid' | 'list'>('grid');
+  const filtered = experiments.filter(item => (category === '전체' || categoryFor(item.id) === category) && `${item.title} ${item.english} ${item.description} ${tags[item.id]?.join(' ') ?? ''}`.toLowerCase().includes(query.trim().toLowerCase()));
+  return <main className="home home-main">
+      <section className="collection" aria-labelledby="collection-title">
+        <div className="collection-heading"><h1 id="collection-title">실험 모음 <span>{String(experiments.length).padStart(2, '0')}</span></h1></div>
+        <div className="collection-toolbar"><div className="category-tabs" role="group" aria-label="실험 분류">{categories.map(value => <button key={value} aria-pressed={category === value} className={category === value ? 'selected' : ''} onClick={() => setCategory(value)}>{value}{value === '전체' && <span>{experiments.length}</span>}</button>)}</div><div className="collection-controls"><div className="search-field"><Search size={16} /><input aria-label="실험 검색" placeholder="어떤 실험을 찾으세요?" value={query} onChange={event => setQuery(event.target.value)} />{query && <button aria-label="검색 지우기" onClick={() => setQuery('')}><X size={14} /></button>}</div><div className="view-toggle" role="group" aria-label="보기 방식"><button aria-label="카드 보기" aria-pressed={view === 'grid'} onClick={() => setView('grid')}><LayoutGrid size={17} /></button><button aria-label="목록 보기" aria-pressed={view === 'list'} onClick={() => setView('list')}><List size={18} /></button></div></div></div>
+        <nav className={`experiment-cards ${view === 'list' ? 'list-view' : ''}`} aria-label="실험 페이지">{filtered.map(({ id, title, english, description, icon: Icon }) => <Link to={`/${id}`} className="experiment-card" key={id}><Preview id={id} /><div className="card-content"><div className="card-meta"><span><Icon size={12} /> {categoryFor(id)}</span><span className="ready-label"><i /> 실행 가능</span></div><div className="card-title"><h2>{title}<span>{english}</span></h2><span className="card-arrow"><ArrowUpRight size={21} /></span></div><p>{description}</p><div className="card-bottom"><div className="card-tags">{tags[id]?.map(tag => <span key={tag}>{tag}</span>)}</div><span className="card-number">/{String(experiments.findIndex(item => item.id === id) + 1).padStart(2, '0')}</span></div></div></Link>)}</nav>
+        {filtered.length === 0 && <div className="empty-state" role="status"><Search size={26} /><h3>일치하는 실험이 없어요.</h3><p>다른 검색어나 분류로 다시 찾아보세요.</p><button onClick={() => { setQuery(''); setCategory('전체'); }}>모든 실험 보기 <ArrowRight size={15} /></button></div>}
+      </section>
+    </main>;
 }

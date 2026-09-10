@@ -1,0 +1,63 @@
+.lab{min-height:100svh;display:flex;flex-direction:column}
+.lab-header{height:77px;display:flex;align-items:center;border-bottom:1px solid #e3e8df;padding:0 5%;gap:20px;background:#fdfefa}
+.back-link{display:flex;gap:9px;align-items:center;font-size:13px}
+.lab-breadcrumb{font-size:11px;color:#a1aa9d;word-spacing:14px}
+.lab-breadcrumb strong{font-weight:400;color:#687663;word-spacing:0}
+.lab-header nav{margin-left:auto;display:flex;gap:8px}
+.lab-header nav a{font-size:11px;padding:9px 15px;border-radius:8px;color:#86917e}
+.lab-header nav a.active{background:#e9efdf;color:#526841}
+.lab-main{width:100%;max-width:1160px;margin:0 auto;padding:55px 35px;flex:1}
+.lab-title{display:flex;justify-content:space-between;align-items:center;margin-bottom:32px}
+.lab-eyebrow{display:flex;align-items:center;gap:7px;font-size:9px;letter-spacing:1.8px;color:#8d9b80}
+.lab-title h1{font-size:31px;letter-spacing:-1.2px;font-weight:600;margin:14px 0 9px;display:flex;align-items:center;gap:15px}
+.lab-title h1 span{font-size:7px;letter-spacing:1px;background:#ecefdf;color:#8a9875;padding:5px 7px;border-radius:4px}
+.lab-title p{font-size:12px;color:#929b8b}
+.text-link{font-size:10px;color:#849176;display:flex;align-items:center;gap:6px}
+.experiment-workspace{display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:22px;align-items:start}
+.chat-panel,.settings-panel,.note-panel,.timer-panel{background:#fff;border:1px solid #e2e7dd;border-radius:15px;overflow:hidden;box-shadow:0 4px 18px #28392503}
+.panel-header{display:flex;align-items:center;justify-content:space-between;min-height:58px;padding:12px 21px;border-bottom:1px solid #edf0e8;font-size:11px}
+.panel-header>span{display:flex;align-items:center;gap:9px}
+.icon-button{background:none;border:1px solid #e3e8dd;border-radius:8px;padding:8px;display:grid;place-items:center;color:#859276}
+.chat-messages{height:360px;overflow-y:auto;padding:25px;display:flex;flex-direction:column;gap:23px}
+.chat-message{max-width:85%;align-self:flex-start}
+.message-author{display:block;font-size:8px;letter-spacing:1px;color:#a1aa99;margin-bottom:7px}
+.chat-message>div{font-size:12px;line-height:1.9;padding:12px 16px;border-radius:3px 12px 12px 12px;background:#f0f3eb;white-space:pre-wrap;overflow-wrap:anywhere}
+.chat-message.user{align-self:flex-end}
+.chat-message.user .message-author{text-align:right}
+.chat-message.user>div{background:#e7effb;color:#4c658a;border-radius:12px 3px 12px 12px}
+.compact{gap:10px}
+.compact .chat-message>div{padding:7px 12px}
+.composer{display:flex;margin:8px 20px 0;padding:7px;border:1px solid #dfe6d7;border-radius:11px}
+.composer:focus-within{border-color:#91a379}
+.composer input{min-width:0;flex:1;border:0;outline:0;padding:8px;font-size:12px}
+.composer input::placeholder{color:#b3bbac}
+.composer button{background:#849a6f;color:white;border:0;border-radius:7px;display:grid;place-items:center;width:35px}
+.panel-footnote{font-size:9px;color:#a5ae9d;text-align:center;margin:12px 0 17px}
+.settings-panel{padding:23px}
+.settings-panel h2{font-size:12px;font-weight:500;display:flex;align-items:center;gap:8px;margin:0 0 25px}
+.settings-panel>label{font-size:10px;color:#7d8a71;display:block;margin-bottom:8px}
+.settings-panel select{width:100%;background:#f7f9f3;border:1px solid #e1e7d9;border-radius:7px;padding:10px 7px;font-size:10px;color:#627354;margin-bottom:24px}
+.settings-panel .checkbox-label{display:flex;align-items:center;gap:6px}
+.checkbox-label input{accent-color:#849a6f}
+.setting-info{border-top:1px solid #edf0e8;margin-top:24px;padding-top:18px;display:flex;justify-content:space-between;font-size:10px;color:#93a086}
+.setting-info strong{font-weight:500;color:#637655}
+.settings-hint{font-size:10px;line-height:1.9;color:#a3ad9b;margin-top:20px;margin-bottom:0}
+.lab-footer{display:flex;justify-content:space-between;margin:0 5%;border-top:1px solid #e2e7db;padding:22px 0;font-size:9px;color:#9ba58f}
+.lab-footer span{font-size:8px;letter-spacing:1.4px}
+.note-panel{max-width:830px;background:#fffdf3}
+.note-panel textarea{display:block;width:calc(100% - 52px);margin:23px 26px;min-height:340px;resize:vertical;background:repeating-linear-gradient(transparent,transparent 31px,#ede9d9 32px);border:0;outline:0;font-size:14px;line-height:32px;color:#696b53}
+.note-panel textarea::placeholder{color:#b4b59f}
+.note-status{font-size:9px;color:#9caa85}
+.note-count{padding:0 26px 20px;font-size:10px;text-align:right;color:#a0a88c}
+.timer-panel{text-align:center;max-width:650px;padding:40px 25px}
+.timer-panel>.lab-eyebrow{justify-content:center}
+.timer-panel h2{font-size:16px;font-weight:400;color:#899b76;margin-top:20px}
+.timer-digits{font-size:96px;font-variant-numeric:tabular-nums;letter-spacing:-5px;color:#61794d;margin:28px 0}
+.timer-digits>span{opacity:.4}
+.duration-options,.timer-buttons{display:flex;justify-content:center;gap:9px;margin:22px 0}
+.duration-options button{background:#f6f8f1;border:1px solid #e6ebde;font-size:12px;border-radius:8px;padding:8px 20px;color:#95a485}
+.duration-options button.selected{background:#eaf0de;border-color:#aabb92;color:#657e4b}
+.primary-button{display:flex;align-items:center;gap:8px;background:#83996d;border:0;border-radius:9px;color:white;padding:12px 29px;font-size:12px}
+.loading,.not-found{display:grid;place-content:center;gap:20px;min-height:100svh;text-align:center;color:#7f9371}
+.not-found h1{font-size:26px}
+.not-found a{font-size:14px}
